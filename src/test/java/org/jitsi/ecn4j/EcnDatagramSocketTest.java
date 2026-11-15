@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.*;
 
 import java.net.*;
+import java.nio.channels.*;
 import java.nio.charset.*;
 import java.time.*;
 import java.util.*;
@@ -99,6 +100,32 @@ public class EcnDatagramSocketTest
         }
     }
 
+    /**
+     * Opens a socket bound to {@code source} that sends with the traffic class {@code trafficClass}.
+     *
+     * It is the socket of a {@link DatagramChannel}, because {@link DatagramSocket#setTrafficClass} of a socket
+     * that was not made by a channel clears the lowest bit of the traffic class for IPv4 before Java 15, on Linux.
+     * That bit is part of the ECN field.
+     */
+    private static DatagramSocket openSender(InetAddress source, int trafficClass)
+        throws Exception
+    {
+        DatagramChannel channel = DatagramChannel.open(
+            source instanceof Inet4Address ? StandardProtocolFamily.INET : StandardProtocolFamily.INET6);
+        try
+        {
+            channel.bind(new InetSocketAddress(source, 0));
+            channel.setOption(StandardSocketOptions.IP_TOS, trafficClass);
+            assertEquals(trafficClass, channel.getOption(StandardSocketOptions.IP_TOS));
+        }
+        catch (Exception e)
+        {
+            channel.close();
+            throw e;
+        }
+        return channel.socket();
+    }
+
     private static void send(DatagramSocket sender, String text, SocketAddress to)
         throws Exception
     {
@@ -121,9 +148,8 @@ public class EcnDatagramSocketTest
 
         for (int tc : TRAFFIC_CLASSES)
         {
-            try (DatagramSocket sender = new DatagramSocket(new InetSocketAddress(source, 0)))
+            try (DatagramSocket sender = openSender(source, tc))
             {
-                sender.setTrafficClass(tc);
                 send(sender, "tc " + tc, to);
 
                 packet.setLength(buf.length);
@@ -236,12 +262,11 @@ public class EcnDatagramSocketTest
             SocketAddress shared = new InetSocketAddress(loopback, port);
 
             try (EcnDatagramSocket receiver = new EcnDatagramSocket((InetSocketAddress) bindAddress, true);
-                DatagramSocket peer = new DatagramSocket(new InetSocketAddress(loopback, 0)))
+                DatagramSocket peer = openSender(loopback, Ecn.ECT_1))
             {
                 assertEquals(port, receiver.getLocalSocketAddress().getPort());
                 assertEquals(bindTo.getAddress().isAnyLocalAddress(),
                     receiver.getLocalSocketAddress().getAddress().isAnyLocalAddress());
-                peer.setTrafficClass(Ecn.ECT_1);
                 byte[] buf = new byte[1500];
                 DatagramPacket packet = new DatagramPacket(buf, buf.length);
 
