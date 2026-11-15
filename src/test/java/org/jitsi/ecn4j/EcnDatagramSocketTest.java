@@ -103,9 +103,11 @@ public class EcnDatagramSocketTest
     /**
      * Opens a socket bound to {@code source} that sends with the traffic class {@code trafficClass}.
      *
-     * It is the socket of a {@link DatagramChannel}, because {@link DatagramSocket#setTrafficClass} of a socket
-     * that was not made by a channel clears the lowest bit of the traffic class for IPv4 before Java 15, on Linux.
-     * That bit is part of the ECN field.
+     * It is the socket of a {@link DatagramChannel}, because the old plain implementation of
+     * {@link DatagramSocket} clears the lowest bit of the traffic class for IPv4 on Linux, in
+     * {@link DatagramSocket#setTrafficClass}. That bit is part of the ECN field. The plain implementation is the
+     * default before Java 15, and can be selected with the system property
+     * {@code jdk.net.usePlainDatagramSocketImpl} in Java 15 through 17.
      */
     private static DatagramSocket openSender(InetAddress source, int trafficClass)
         throws Exception
